@@ -14,36 +14,11 @@ const token = process.env.WHATSAPP_TOKEN;
 
 // Imports dependencies and set up http server
 const request = require("request"),
-  express = require("express"),
-  body_parser = require("body-parser"),
-  axios = require("axios").default,
-  app = express().use(body_parser.json()); // creates express http server
-const fs = require('fs');
-
-const Tesseract = require('tesseract.js');
-
-async function extractTextFromImageURL(imageURL, bearerToken) {
-  try {
-    const response = await axios({
-      url: imageURL,
-      method: 'GET',
-      responseType: 'arraybuffer',
-      headers: {
-        'Authorization': `Bearer ${bearerToken}`,
-        'Content-Type': 'application/octet-stream'
-      }
-    });
-
-    const buffer = Buffer.from(response.data, 'binary');
-
-    const { data: { text } } = await Tesseract.recognize(buffer);
-
-    return text;
-  } catch (error) {
-    console.error(error);
-  }
-}
-
+      express = require("express"),
+      body_parser = require("body-parser"),
+      axios = require("axios").default,
+      app = express().use(body_parser.json()), // creates express http server
+      fs = require('fs');
 
 // Sets server port and logs message on success
 app.listen(process.env.PORT || 1337, () => console.log("webhook is listening"));
@@ -51,10 +26,23 @@ app.listen(process.env.PORT || 1337, () => console.log("webhook is listening"));
 // Initialize an empty object to store the data
 const conversationData = {};
 
-
 // Function to update the state of a conversation
 function updateConversationState(waId, state) {
-  conversationData[waId] = state;
+  if (conversationData[waId]) {
+    conversationData[waId].state = state;
+  } else {
+    conversationData[waId] = {
+      "state": state,
+      "choice": -1,
+    }    
+  }
+
+}
+
+function updateConversationChoice(waId, choice) {
+  conversationData[waId].choice = choice;
+  console.log(conversationData);
+  
 }
 
 // Function to retrieve the state of a conversation
@@ -71,8 +59,6 @@ const STATES = {
   6: 'group_link',
 };
 
-
-
 // Usage example
 let currentState = STATES.START;
 if (currentState === STATES.START) {
@@ -83,8 +69,11 @@ function sendResponse(res, req, msg, resp_message) {
   let phone_number_id =
   req.body.entry[0].changes[0].value.metadata.phone_number_id;
   let from = req.body.entry[0].changes[0].value.messages[0].from;
+  //console.log("default_message " + default_menu_message);
   axios({
     method: "POST", // Required, HTTP method, a string, e.g. POST, GET
+    //maxBodyLength: Infinity,
+    //maxContentLength: Infinity,
     url:
       "https://graph.facebook.com/v12.0/" +
       phone_number_id +
@@ -96,7 +85,94 @@ function sendResponse(res, req, msg, resp_message) {
       text: { body: resp_message },
     },
     headers: { "Content-Type": "application/json" },
-  });
+  }).catch((error) => {
+  console.log(error);
+});
+}
+
+function messageHasBody(req) {
+  if (req.body.object){
+    return true;
+  }
+  return false;
+}
+
+function isTextMessage(req) {
+  if (req.body.entry &&
+      req.body.entry[0].changes &&
+      req.body.entry[0].changes[0] &&
+      req.body.entry[0].changes[0].value.messages &&
+      req.body.entry[0].changes[0].value.messages[0])
+  {
+    return true;
+  }
+  return false;
+}
+
+const menu = {
+  "1" : {
+    "standard": "6th",
+    "whatsapp_group_link": "https://chat.whatsapp.com/LLV2qy4j8CxJsjsLbxuVKy",
+    "name": "6th Maths",
+  },
+  "2" : {
+    "standard": "7th",
+    "whatsapp_group_link": "https://chat.whatsapp.com/ER6XBYbrpE6HIpFnCIieAG",
+    "name": "7th Maths",
+  },
+  "3" : {
+    "standard": "8th",
+    "whatsapp_group_link": "https://chat.whatsapp.com/Gr80bQQYwkE8YdA93EfVsv",
+    "name": "8th Maths",
+  },
+  "4" : {
+    "standard": "9th",
+    "whatsapp_group_link": "https://chat.whatsapp.com/I2nRjKx49GKDPIoKGvOMdK",
+    "name": "9th Maths",
+  },
+  "5" : {
+    "standard": "Olympiad Geometry",
+    "whatsapp_group_link": "https://chat.whatsapp.com/ERnI0H9urVyAATBsf1EGDH",
+    "name": "Olympiad Geometry",
+  },
+}
+let wa_link = menu[2].whatsapp_group_link;
+console.log(wa_link);
+
+function populate_options(menu) {
+  let menu_size = Object.keys(menu).length;
+  let option_range = " [1-" + menu_size + "] "
+  let options_message = "Please select a option from" + option_range + "for the group you want to join:\n\n";
+
+  // Iterate over the menu to add options.
+  for (const key in menu) {
+    options_message += key + ". " + menu[key].name + "\n";
+  }
+  return options_message;
+}
+
+function create_welcome_message(menu) {
+
+  let menu_message = "*Welcome to Question A Day*.\nGroups you can join are as follows.\n";
+  menu_message += populate_options(menu);
+  menu_message += "\nThanks,\nSubodh Pethe";
+  //console.log(menu_message);
+  return menu_message;
+}
+
+const default_options_message = populate_options(menu);
+const default_welcome_message = create_welcome_message(menu);
+
+function isNumber(input) {
+  return !isNaN(input);
+}
+
+function isValidMenuChoice(input) {
+  if (input >= 1 && input <= Object.keys(menu).length) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 // Accepts POST requests at /webhook endpoint
@@ -106,89 +182,101 @@ app.post("/webhook", (req, res) => {
 
   // Check the Incoming webhook message
   console.log(JSON.stringify(req.body, null, 2));
-  //console.log(JSON.stringify(req, null, 2));
 
   // info on WhatsApp text message payload: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/payload-examples#text-messages
-  if (req.body.object) {
-    if (
-      req.body.entry &&
-      req.body.entry[0].changes &&
-      req.body.entry[0].changes[0] &&
-      req.body.entry[0].changes[0].value.messages &&
-      req.body.entry[0].changes[0].value.messages[0]
-    ) {
-      let phone_number_id =
-        req.body.entry[0].changes[0].value.metadata.phone_number_id;
-      let from = req.body.entry[0].changes[0].value.messages[0].from; // extract the phone number from the webhook payload
+  if (messageHasBody(req)) {
+    if (isTextMessage(req)) {
       
-      let resp_message = ""
+      let from = req.body.entry[0].changes[0].value.messages[0].from; // extract the phone number from the webhook payload
+      let resp_message = default_welcome_message// create_welcome_message(menu);
       
       let conversation_state = getConversationState(from)
-      if (conversation_state) {
+      console.log("Conversation_state: " + conversation_state);
+      if (!conversation_state)
+      {
+        let init_input = req.body.entry[0].changes[0].value.messages[0].text.body;
+        if (init_input.toLowerCase() != "qad") {
+          console.log('invalid init string');
+          res.sendStatus(200);
+          return;
+        } else {
+          console.log('Welcome new user');
+          updateConversationState(from, "1");  
+          
+        }
+      }  
+      else {
         console.log('Key exists!' + conversation_state);
-        switch (conversation_state) {
+        switch (conversation_state.state) {
           case "1":
-            let msg_body = req.body.entry[0].changes[0].value.messages[0].text.body; // extract the message text from the webhook payload
-            switch (msg_body == "1") {
-                
+            let input_choice = req.body.entry[0].changes[0].value.messages[0].text.body; // extract the message text from the webhook payload
+            if (isNumber(input_choice) && isValidMenuChoice(input_choice)) {
+              conversation_state.choice = input_choice;
+              updateConversationChoice(from, input_choice);
+              console.log("You choose" + conversation_state.choice);
+              resp_message = `You choose: ${input_choice}\nSend yes to confirm. Send no to return to menu.\n`;
+              updateConversationState(from, "2");
+            } else {
+              resp_message = `Invalid choice.\n`;
+              resp_message += default_options_message;
             }
-            resp_message = "You choose: ${msg_body} \nTo confirm send yes\n";
-            updateConversationState(from, "2");
             break;
           case "2": 
-            resp_message = "Please send INR 30 to smita.peth70@oksbi UPI and send the screenshot here.";
-            updateConversationState(from, "4");
+            let input = req.body.entry[0].changes[0].value.messages[0].text.body;
+            if (input.toLowerCase() == "yes") {
+              console.log("You choose" + conversation_state.choice);
+              resp_message = "Please send INR 30 to smita.pethe70@oksbi UPI and send the screenshot here.";
+              updateConversationState(from, "3");              
+            } else if (input.toLowerCase() == "no"){
+              conversation_state.choice = -1;
+              resp_message = default_options_message;
+              updateConversationState(from, "1");
+            } else {
+              conversation_state.choice = -1;
+              resp_message = `Invalid choice.\n`;
+              resp_message += default_options_message;
+              updateConversationState(from, "1");
+            }
             break;
           case "3":
             
             let type = req.body.entry[0].changes[0].value.messages[0].type;
             console.log('Type is:' + type);
             if (type == "image") {
-
-            let config = {
-              method: 'get',
-              maxBodyLength: Infinity,
-              url: 'https://graph.facebook.com/v16.0/' + req.body.entry[0].changes[0].value.messages[0].image.id,
-              headers: { 
-                'Authorization': 'Bearer ' + token 
-              }
-            };
-
-            axios.request(config)
-            .then((response) => {
-                  console.log(JSON.stringify(response.data.url));
-                  let imageURL = response.data.url;
-                  let bearerToken = token;
-                  extractTextFromImageURL('https://tesseract.projectnaptha.com/img/eng_bw.png', bearerToken).then(text => {
-                    console.log(text);
-                  });
-
-            })
-            .catch((error) => {
-              console.log(error);
-            });
-
-
-
-              resp_message = "Thanks for joining 8th standard QAD program. Please use the following link to joining the whatsapp group.\nLink: <insert_group_link_here>";
+              console.log("choice is:" + conversation_state.choice)
+              let wa_link = menu[conversation_state.choice + ""].whatsapp_group_link;
+              console.log("wa link: " + wa_link);
+              resp_message = "Thanks for joining 8th standard QAD program. Please use the following link to joining the whatsapp group.\n" + 
+                             `Please do not share the link as this is paid activity.\nLink: ${wa_link}` + 
+                              "\nPlease send 'joined' to this chat after successfully joining the group\n";
               updateConversationState(from, "4");
             } else {
-              resp_message = "Please send the confirmation image\n";
+              let input = req.body.entry[0].changes[0].value.messages[0].text.body;
+              if (input.toLowerCase() == "back") {
+                conversation_state.choice = -1;
+                resp_message = default_options_message;
+                updateConversationState(from, "1");
+              } else {
+                resp_message = "Please send the confirmation image\nEnter 'back' to go back to menu";  
+              }
             }
             break;
           case "4":
-            resp_message = "Thanks\n- Subodh Pethe"
-            delete conversationData[from];
+            let final = req.body.entry[0].changes[0].value.messages[0].text.body;
+            if (final.toLowerCase() != "joined") {
+              conversation_state.choice = -1;
+              resp_message = default_options_message;
+              updateConversationState(from, "1");
+            } else {
+                resp_message = "Thanks for joining QAD\n- Subodh Pethe"
+                delete conversationData[from];
+            }
             break;
         }
         
-      } else {
-        console.log('Wecome new user');
-        resp_message = "*Welcome to Question A Day*.\nPlease select the group you wish to join\n\n1) 8th Maths\n2) 9th Maths\n3) 10th Maths\n4) 8th Olympiad\n\nThanks,\nSubodh Pethe";
-        updateConversationState(from, "3");
-      }  
-      //sendResponse(res, req, resp_message, resp_message);
-      sendResponse(res, req, resp_message, resp_message);
+      }
+
+        sendResponse(res, req, resp_message, resp_message);
     }
     res.sendStatus(200);
   } else {
@@ -197,6 +285,9 @@ app.post("/webhook", (req, res) => {
   }
 });
 
+
+
+// SHEEL Note: Not needed after initializing the webhook.
 // Accepts GET requests at the /webhook endpoint. You need this URL to setup webhook initially.
 // info on verification request payload: https://developers.facebook.com/docs/graph-api/webhooks/getting-started#verification-requests 
 app.get("/webhook", (req, res) => {
