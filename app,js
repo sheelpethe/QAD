@@ -111,33 +111,36 @@ function isTextMessage(req) {
 
 const menu = {
   "1" : {
-    "standard": "6th",
+    "money": "INR 25",
     "whatsapp_group_link": "https://chat.whatsapp.com/LLV2qy4j8CxJsjsLbxuVKy",
     "name": "6th Maths",
+    "description": "- Basic Maths 2\n- 25 Days\n- INR 25\n",    
   },
   "2" : {
-    "standard": "7th",
+    "money": "INR 45",
     "whatsapp_group_link": "https://chat.whatsapp.com/ER6XBYbrpE6HIpFnCIieAG",
     "name": "7th Maths",
+    "description": "- Topic: Angle Chase/Pythagoras Theorem\n- 45 Days\n- INR 45\n",
   },
   "3" : {
-    "standard": "8th",
+    "money": "INR 29",
     "whatsapp_group_link": "https://chat.whatsapp.com/Gr80bQQYwkE8YdA93EfVsv",
     "name": "8th Maths",
+    "description": "- Topic: Algebra\n- 29 Days\n- INR 29\n",
   },
   "4" : {
-    "standard": "9th",
+    "money": "INR 30",
     "whatsapp_group_link": "https://chat.whatsapp.com/I2nRjKx49GKDPIoKGvOMdK",
     "name": "9th Maths",
+    "description": "- Topic: Circle 1\n- 30 Days\n- INR 30\n",    
   },
   "5" : {
-    "standard": "Olympiad Geometry",
+    "money": "INR 50",
     "whatsapp_group_link": "https://chat.whatsapp.com/ERnI0H9urVyAATBsf1EGDH",
     "name": "Olympiad Geometry",
+    "description": "- Olypiad level geometry\n- For Those who completed basic geometry\n- 50 Days\n- INR 50\n",
   },
 }
-let wa_link = menu[2].whatsapp_group_link;
-console.log(wa_link);
 
 function populate_options(menu) {
   let menu_size = Object.keys(menu).length;
@@ -197,8 +200,9 @@ app.post("/webhook", (req, res) => {
         let init_input = req.body.entry[0].changes[0].value.messages[0].text.body;
         if (init_input.toLowerCase() != "qad") {
           console.log('invalid init string');
-          res.sendStatus(200);
-          return;
+          resp_message = "If you wish to joing question a day activity,\n*Please send 'QAD' in this chat*\nThanks."
+          //res.sendStatus(200);
+          //return;
         } else {
           console.log('Welcome new user');
           updateConversationState(from, "1");  
@@ -213,8 +217,11 @@ app.post("/webhook", (req, res) => {
             if (isNumber(input_choice) && isValidMenuChoice(input_choice)) {
               conversation_state.choice = input_choice;
               updateConversationChoice(from, input_choice);
+              let group_desc = "*" + menu[conversation_state.choice].name + ":*\n" + menu[conversation_state.choice + ""].description;
               console.log("You choose" + conversation_state.choice);
-              resp_message = `You choose: ${input_choice}\nSend yes to confirm. Send no to return to menu.\n`;
+              resp_message = `You choose: ${input_choice}\n\n` +
+                              group_desc + 
+                            "\nSend yes to confirm. Send no to return to menu.\n";
               updateConversationState(from, "2");
             } else {
               resp_message = `Invalid choice.\n`;
@@ -225,17 +232,18 @@ app.post("/webhook", (req, res) => {
             let input = req.body.entry[0].changes[0].value.messages[0].text.body;
             if (input.toLowerCase() == "yes") {
               console.log("You choose" + conversation_state.choice);
-              resp_message = "Please send INR 30 to smita.pethe70@oksbi UPI and send the screenshot here.";
+              let money = menu[conversation_state.choice + ""].money;
+              resp_message = `Please send ${money} to smita.pethe70@oksbi UPI and send the screenshot here.\n\nSend 'back' in this chat to return to menu.`;
               updateConversationState(from, "3");              
             } else if (input.toLowerCase() == "no"){
               conversation_state.choice = -1;
               resp_message = default_options_message;
               updateConversationState(from, "1");
             } else {
-              conversation_state.choice = -1;
-              resp_message = `Invalid choice.\n`;
-              resp_message += default_options_message;
-              updateConversationState(from, "1");
+              //conversation_state.choice = -1;
+              //resp_message = `Invalid choice.\n`;
+              resp_message = "Send yes to confirm. Send no to return to menu.\n";
+              //updateConversationState(from, "1");
             }
             break;
           case "3":
@@ -247,9 +255,9 @@ app.post("/webhook", (req, res) => {
               let wa_link = menu[conversation_state.choice + ""].whatsapp_group_link;
               console.log("wa link: " + wa_link);
               resp_message = "Thanks for joining 8th standard QAD program. Please use the following link to joining the whatsapp group.\n" + 
-                             `Please do not share the link as this is paid activity.\nLink: ${wa_link}` + 
-                              "\nPlease send 'joined' to this chat after successfully joining the group\n";
-              updateConversationState(from, "4");
+                             `Please do not share the link as this is paid activity.\n\nLink: ${wa_link}` + 
+                              "\n\nThanks,\n- Subodh Pethe";
+              delete conversationData[from];
             } else {
               let input = req.body.entry[0].changes[0].value.messages[0].text.body;
               if (input.toLowerCase() == "back") {
@@ -257,19 +265,8 @@ app.post("/webhook", (req, res) => {
                 resp_message = default_options_message;
                 updateConversationState(from, "1");
               } else {
-                resp_message = "Please send the confirmation image\nEnter 'back' to go back to menu";  
+                resp_message = "Please send the confirmation image to proceed.\nSend 'back' in this chat to return to menu.";  
               }
-            }
-            break;
-          case "4":
-            let final = req.body.entry[0].changes[0].value.messages[0].text.body;
-            if (final.toLowerCase() != "joined") {
-              conversation_state.choice = -1;
-              resp_message = default_options_message;
-              updateConversationState(from, "1");
-            } else {
-                resp_message = "Thanks for joining QAD\n- Subodh Pethe"
-                delete conversationData[from];
             }
             break;
         }
