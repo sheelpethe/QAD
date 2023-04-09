@@ -1,8 +1,5 @@
 /*
- * Starter Project for WhatsApp Echo Bot Tutorial
- *
- * Remix this as the starting point for following the WhatsApp Echo Bot tutorial
- *
+ * Question a Day (QAD) whatsapp automation webhooks
  */
 
 "use strict";
@@ -25,7 +22,7 @@ app.listen(process.env.PORT || 1337, () => console.log("webhook is listening"));
 
 // This stores the conversation state for a particular number and the choice.
 // Used to maintain state.
-const conversationData = {};
+let conversationData = {};
 
 function deleteConversation(from) {
   delete conversationData[from];
@@ -162,6 +159,8 @@ const default_options_message = populate_options(menu);
 const default_welcome_message = create_welcome_message(menu);
 const payment_upi = "smita.pethe70@oksbi";
 
+let total_conversations = 0;
+
 // Validates whether input is a number or not
 function isNumber(input) {
   return !isNaN(input);
@@ -179,10 +178,10 @@ function isValidMenuChoice(input) {
 const responses = {
   "default_welcome": default_welcome_message,
   "default_options": default_options_message,
-  "request_qad_input": "If you wish to join question a day activity,\n*Please send 'QAD' in this chat*\nThanks.",
-  "confirm_choice": "\nSend 'yes' to confirm choice.",
+  "request_qad_input": "*Please send 'QAD' in this chat*, if you wish to join question a day activity\nThanks.",
+  "confirm_choice": "\nSend 'Yes' to confirm choice.",
   "invalid_choice": "Invalid choice!\n",
-  "back_to_menu": "\nSend 'back' to return to menu.",
+  "back_to_menu": "\nSend 'Back' to return to menu.",
   "screenshot_request": "Please send the confirmation screenshot to proceed.",
   "join_message": "\nPlease use the following link to joining the whatsapp group.\nPlease do not share the link as this is paid activity.\n\n",
   "thanks": "\n\nThanks,\n- Subodh Pethe",
@@ -196,7 +195,7 @@ function init_conversation(req, from) {
     resp_message = responses["request_qad_input"];
   } else {
     resp_message = responses["default_welcome"];
-    setConversationState(from, "1");
+    setConversationState(from, state["init"]);
   }
   return resp_message;
 }
@@ -212,7 +211,7 @@ function process_group_choice(req, from) {
     let group_desc = `*${group_name}:*\n${group_details}`;
     resp_message = `You choose: ${input_choice}\n\n${group_desc}` + responses["confirm_choice"] + responses["back_to_menu"];
     
-    setConversationState(from, "2");
+    setConversationState(from, state["group_choice"]);
   } else {
     resp_message = responses["invalid_choice"] + responses["default_options"];
   }  
@@ -222,7 +221,7 @@ function process_group_choice(req, from) {
 
 function do_back_to_menu(from) {
   setGroupChoice(from, -1);
-  setConversationState(from, "1");
+  setConversationState(from, state["init"]);
   return responses["default_options"];
 }
 
@@ -232,8 +231,8 @@ function confirm_group_choice(req, from, conversation_state) {
   let input = req.body.entry[0].changes[0].value.messages[0].text.body;
   if (input.toLowerCase() == "yes") {
     let money = menu[conversation_state.choice + ""].money;
-    resp_message = `Please send ${money} to ${payment_upi} UPI and send the screenshot here.\n\n` + responses["back_to_menu"];
-    setConversationState(from, "3");              
+    resp_message = `Please send ${money} to ${payment_upi} UPI and send the screenshot in this chat.\n` + responses["back_to_menu"];
+    setConversationState(from, state["confirm_choice"]);              
   } else if (input.toLowerCase() == "back"){
     resp_message = do_back_to_menu(from);
   } else {
@@ -260,15 +259,22 @@ function process_screenshot_and_send_link(req, from, conversation_state) {
     resp_message = responses["screenshot_request"] + responses["back_to_menu"];
     }
   }
-  return resp_message = "";
+  return resp_message;
   
 }
 
+const state = {
+  "init": "1",
+  "group_choice": "2",
+  "confirm_choice": "3",
+  "final": "4",
+}
 
 // Accepts POST requests at /webhook endpoint
 app.post("/webhook", (req, res) => {
   // Parse the request body from the POST
   let body = req.body;
+  console.log(req.body);
 
   // Check the Incoming webhook message
   console.log(JSON.stringify(req.body, null, 2));
@@ -283,19 +289,20 @@ app.post("/webhook", (req, res) => {
       // No conversation_state implies this is a new user
       // If conversation state already exists then actions depend on the state of the conversation.
       if (!conversation_state) {
+        total_conversations++;
         resp_message = init_conversation(req, from);
       } else {
         
         // State model for the conversation based on state
         switch (conversation_state.state) {
-          case "1":
+          case state["init"]:
             resp_message = process_group_choice(req, from);
             break;
-          case "2": 
+          case state["group_choice"]: 
             resp_message = confirm_group_choice(req, from, conversation_state);
             break;
-          case "3":
-            resp_message = process_screenshot_and_send_link();
+          case state["confirm_choice"]:
+            resp_message = process_screenshot_and_send_link(req, from, conversation_state);
             break;
         }
       }
@@ -337,4 +344,23 @@ app.get("/webhook", (req, res) => {
       res.sendStatus(403);
     }
   }
+});
+
+
+app.get('/clearconversations', (req, res) => {
+  // Handle the GET request here
+  console.log("Clearing conversation data.\nTotal conversations so far: " + total_conversations);
+  conversationData = {};
+  res.sendStatus(200);
+});
+
+app.get('/getconversations', (req, res) => {
+  // Handle the GET request here
+  let ret = {
+    "total_conversations": total_conversations,
+    "conversationData": conversationData,
+  };
+  
+  console.log(ret);
+  res.json(ret);
 });
