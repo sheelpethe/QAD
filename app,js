@@ -364,3 +364,57 @@ app.get('/getconversations', (req, res) => {
   console.log(ret);
   res.json(ret);
 });
+
+ app.get('/test', (req, res) => {
+     const tesseract = require("node-tesseract-ocr");
+
+ console.log("test");
+
+     const config = {
+       lang: "eng",
+       oem: 1,
+       psm: 3,
+     }
+
+     console.log(token);
+
+
+     const axios = require('axios');
+
+ let config1 = {
+   method: 'get',
+   maxBodyLength: Infinity,
+   url: 'https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1935444176826010&ext=1681060043&hash=ATuPu0SDxumzHcPH9HaMaU3lfrBUfWWnejreC3nkPk_tIA',
+   headers: {
+     'Authorization': 'Bearer                                                                                                                                                                                                            EAAH3CSuC92gBAC7xF3ZB938OAAg7hsmA5IvTGzR2bQsnaKltD7OBGHbtcLvZCG6vZClI75XdGznDZAtZBNQyboARTdX1GDT5xk5YZBzeNhphoJaiaEzDZAZAnuByYHHAKMHVI2VfZC5Bfec0KPRU031f1UFrstF0v02pDTpMNAGrdFCdYR1yIjPtX2bY2cZCwza0VeqIV3ZCWvLHsnpL8MyJIfItvvITaJgDZC UZD'
+   },
+     responseType: "arraybuffer"
+ };
+
+     var result = "Hi";
+ axios.request(config1)
+ .then((response) => {
+         tesseract
+           .recognize(response.data, config)
+           .then((text) => {
+         result = text;
+         console.log("Result:", text)
+         res.json({ result });
+           })
+ })
+ .catch((error) => {
+   console.log(error);
+ });
+
+ })
+
+ app.get('/image', (req, res) => {
+   const path = require('path');
+   const imagePath = path.join(__dirname, '/public/wa1.jpg');
+   res.sendFile(imagePath);
+ });
+
+ app.get('/', (req, res) => {
+   res.send('Hello Smita Pethe!')
+ });
+
