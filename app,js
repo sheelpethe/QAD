@@ -23,11 +23,16 @@ const request = require("request"),
 // Sets server port and logs message on success
 app.listen(process.env.PORT || 1337, () => console.log("webhook is listening"));
 
-// Initialize an empty object to store the data
+// This stores the conversation state for a particular number and the choice.
+// Used to maintain state.
 const conversationData = {};
 
+function deleteConversation(from) {
+  delete conversationData[from];
+}
+
 // Function to update the state of a conversation
-function updateConversationState(waId, state) {
+function setConversationState(waId, state) {
   if (conversationData[waId]) {
     conversationData[waId].state = state;
   } else {
@@ -36,13 +41,11 @@ function updateConversationState(waId, state) {
       "choice": -1,
     }    
   }
-
 }
 
-function updateConversationChoice(waId, choice) {
-  conversationData[waId].choice = choice;
-  console.log(conversationData);
-  
+// Function to update the group choice of a conversation
+function setGroupChoice(waId, choice) {
+  conversationData[waId].choice = choice;  
 }
 
 // Function to retrieve the state of a conversation
@@ -50,26 +53,15 @@ function getConversationState(waId) {
   return conversationData[waId];
 }
 
-const STATES = {
-  1: 'init',
-  2: 'options_sent',
-  3: 'confirm choice',
-  4: 'sent_upi',
-  5: 'confirm_payment',
-  6: 'group_link',
-};
-
-// Usage example
-let currentState = STATES.START;
-if (currentState === STATES.START) {
-  console.log('Starting state!');
-}
-
-function sendResponse(res, req, msg, resp_message) {
-  let phone_number_id =
-  req.body.entry[0].changes[0].value.metadata.phone_number_id;
+// Wrapper to send responses i.e. whatsapp messages to target
+function sendResponse(res, req, resp_message) {
+  let phone_number_id = req.body.entry[0].changes[0].value.metadata.phone_number_id;
   let from = req.body.entry[0].changes[0].value.messages[0].from;
-  //console.log("default_message " + default_menu_message);
+  
+  if (!resp_message) {
+    return;
+  }
+  
   axios({
     method: "POST", // Required, HTTP method, a string, e.g. POST, GET
     //maxBodyLength: Infinity,
@@ -86,8 +78,8 @@ function sendResponse(res, req, msg, resp_message) {
     },
     headers: { "Content-Type": "application/json" },
   }).catch((error) => {
-  console.log(error);
-});
+    console.log(error);
+  });
 }
 
 function messageHasBody(req) {
@@ -109,29 +101,31 @@ function isTextMessage(req) {
   return false;
 }
 
+// Dictionary containing group options or the group menu
+// Each choice must have fields - money, whatsapp_group_link, name and description
 const menu = {
   "1" : {
     "money": "INR 25",
     "whatsapp_group_link": "https://chat.whatsapp.com/LLV2qy4j8CxJsjsLbxuVKy",
-    "name": "6th Maths",
+    "name": "6th Math",
     "description": "- Basic Maths 2\n- 25 Days\n- INR 25\n",    
   },
   "2" : {
     "money": "INR 45",
     "whatsapp_group_link": "https://chat.whatsapp.com/ER6XBYbrpE6HIpFnCIieAG",
-    "name": "7th Maths",
+    "name": "7th Math",
     "description": "- Topic: Angle Chase/Pythagoras Theorem\n- 45 Days\n- INR 45\n",
   },
   "3" : {
     "money": "INR 29",
     "whatsapp_group_link": "https://chat.whatsapp.com/Gr80bQQYwkE8YdA93EfVsv",
-    "name": "8th Maths",
+    "name": "8th Math",
     "description": "- Topic: Algebra\n- 29 Days\n- INR 29\n",
   },
   "4" : {
     "money": "INR 30",
     "whatsapp_group_link": "https://chat.whatsapp.com/I2nRjKx49GKDPIoKGvOMdK",
-    "name": "9th Maths",
+    "name": "9th Math",
     "description": "- Topic: Circle 1\n- 30 Days\n- INR 30\n",    
   },
   "5" : {
@@ -142,6 +136,7 @@ const menu = {
   },
 }
 
+// Helps populate the menu to be displayed to the user. Menu contains group choices.
 function populate_options(menu) {
   let menu_size = Object.keys(menu).length;
   let option_range = " [1-" + menu_size + "] "
@@ -154,8 +149,8 @@ function populate_options(menu) {
   return options_message;
 }
 
+// menu options + greetings.
 function create_welcome_message(menu) {
-
   let menu_message = "*Welcome to Question A Day*.\nGroups you can join are as follows.\n";
   menu_message += populate_options(menu);
   menu_message += "\nThanks,\nSubodh Pethe";
@@ -165,11 +160,14 @@ function create_welcome_message(menu) {
 
 const default_options_message = populate_options(menu);
 const default_welcome_message = create_welcome_message(menu);
+const payment_upi = "smita.pethe70@oksbi";
 
+// Validates whether input is a number or not
 function isNumber(input) {
   return !isNaN(input);
 }
 
+// Validates whether the user input for group in within bounds.
 function isValidMenuChoice(input) {
   if (input >= 1 && input <= Object.keys(menu).length) {
     return true;
@@ -177,6 +175,95 @@ function isValidMenuChoice(input) {
     return false;
   }
 }
+
+const responses = {
+  "default_welcome": default_welcome_message,
+  "default_options": default_options_message,
+  "request_qad_input": "If you wish to join question a day activity,\n*Please send 'QAD' in this chat*\nThanks.",
+  "confirm_choice": "\nSend 'yes' to confirm choice.",
+  "invalid_choice": "Invalid choice!\n",
+  "back_to_menu": "\nSend 'back' to return to menu.",
+  "screenshot_request": "Please send the confirmation screenshot to proceed.",
+  "join_message": "\nPlease use the following link to joining the whatsapp group.\nPlease do not share the link as this is paid activity.\n\n",
+  "thanks": "\n\nThanks,\n- Subodh Pethe",
+}
+
+function init_conversation(req, from) {
+  let resp_message = "";
+  let init_input = req.body.entry[0].changes[0].value.messages[0].text.body;
+  
+  if (init_input.toLowerCase() != "qad") {
+    resp_message = responses["request_qad_input"];
+  } else {
+    resp_message = responses["default_welcome"];
+    setConversationState(from, "1");
+  }
+  return resp_message;
+}
+
+function process_group_choice(req, from) {
+  let resp_message = "";
+  
+  let input_choice = req.body.entry[0].changes[0].value.messages[0].text.body; // extract the message text from the webhook payload
+  if (isNumber(input_choice) && isValidMenuChoice(input_choice)) {
+    setGroupChoice(from, input_choice);
+    let group_name = menu[input_choice].name;
+    let group_details = menu[input_choice].description;
+    let group_desc = `*${group_name}:*\n${group_details}`;
+    resp_message = `You choose: ${input_choice}\n\n${group_desc}` + responses["confirm_choice"] + responses["back_to_menu"];
+    
+    setConversationState(from, "2");
+  } else {
+    resp_message = responses["invalid_choice"] + responses["default_options"];
+  }  
+  
+  return resp_message;
+}
+
+function do_back_to_menu(from) {
+  setGroupChoice(from, -1);
+  setConversationState(from, "1");
+  return responses["default_options"];
+}
+
+function confirm_group_choice(req, from, conversation_state) {
+  let resp_message = "";
+
+  let input = req.body.entry[0].changes[0].value.messages[0].text.body;
+  if (input.toLowerCase() == "yes") {
+    let money = menu[conversation_state.choice + ""].money;
+    resp_message = `Please send ${money} to ${payment_upi} UPI and send the screenshot here.\n\n` + responses["back_to_menu"];
+    setConversationState(from, "3");              
+  } else if (input.toLowerCase() == "back"){
+    resp_message = do_back_to_menu(from);
+  } else {
+    resp_message = responses["confirm_choice"] + responses["back_to_menu"];
+  }  
+  
+  return resp_message;
+}
+
+function process_screenshot_and_send_link(req, from, conversation_state) {
+  let resp_message = "";
+  
+  let type = req.body.entry[0].changes[0].value.messages[0].type;
+  if (type == "image") {
+    let wa_link = menu[conversation_state.choice].whatsapp_group_link;
+    let group_name = menu[conversation_state.choice].name;
+    resp_message = `Thanks for joining ${group_name} QAD program.\n` + responses["join_message"] + `Link: ${wa_link}` + responses["thanks"];
+    deleteConversation(from);
+  } else {
+    let input = req.body.entry[0].changes[0].value.messages[0].text.body;
+    if (input.toLowerCase() == "back") {
+      resp_message = do_back_to_menu(from);
+    } else {
+    resp_message = responses["screenshot_request"] + responses["back_to_menu"];
+    }
+  }
+  return resp_message = "";
+  
+}
+
 
 // Accepts POST requests at /webhook endpoint
 app.post("/webhook", (req, res) => {
@@ -189,91 +276,30 @@ app.post("/webhook", (req, res) => {
   // info on WhatsApp text message payload: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/payload-examples#text-messages
   if (messageHasBody(req)) {
     if (isTextMessage(req)) {
-      
       let from = req.body.entry[0].changes[0].value.messages[0].from; // extract the phone number from the webhook payload
-      let resp_message = default_welcome_message// create_welcome_message(menu);
+      let resp_message = "";
+      let conversation_state = getConversationState(from);
       
-      let conversation_state = getConversationState(from)
-      console.log("Conversation_state: " + conversation_state);
-      if (!conversation_state)
-      {
-        let init_input = req.body.entry[0].changes[0].value.messages[0].text.body;
-        if (init_input.toLowerCase() != "qad") {
-          console.log('invalid init string');
-          resp_message = "If you wish to joing question a day activity,\n*Please send 'QAD' in this chat*\nThanks."
-          //res.sendStatus(200);
-          //return;
-        } else {
-          console.log('Welcome new user');
-          updateConversationState(from, "1");  
-          
-        }
-      }  
-      else {
-        console.log('Key exists!' + conversation_state);
+      // No conversation_state implies this is a new user
+      // If conversation state already exists then actions depend on the state of the conversation.
+      if (!conversation_state) {
+        resp_message = init_conversation(req, from);
+      } else {
+        
+        // State model for the conversation based on state
         switch (conversation_state.state) {
           case "1":
-            let input_choice = req.body.entry[0].changes[0].value.messages[0].text.body; // extract the message text from the webhook payload
-            if (isNumber(input_choice) && isValidMenuChoice(input_choice)) {
-              conversation_state.choice = input_choice;
-              updateConversationChoice(from, input_choice);
-              let group_desc = "*" + menu[conversation_state.choice].name + ":*\n" + menu[conversation_state.choice + ""].description;
-              console.log("You choose" + conversation_state.choice);
-              resp_message = `You choose: ${input_choice}\n\n` +
-                              group_desc + 
-                            "\nSend yes to confirm. Send no to return to menu.\n";
-              updateConversationState(from, "2");
-            } else {
-              resp_message = `Invalid choice.\n`;
-              resp_message += default_options_message;
-            }
+            resp_message = process_group_choice(req, from);
             break;
           case "2": 
-            let input = req.body.entry[0].changes[0].value.messages[0].text.body;
-            if (input.toLowerCase() == "yes") {
-              console.log("You choose" + conversation_state.choice);
-              let money = menu[conversation_state.choice + ""].money;
-              resp_message = `Please send ${money} to smita.pethe70@oksbi UPI and send the screenshot here.\n\nSend 'back' in this chat to return to menu.`;
-              updateConversationState(from, "3");              
-            } else if (input.toLowerCase() == "no"){
-              conversation_state.choice = -1;
-              resp_message = default_options_message;
-              updateConversationState(from, "1");
-            } else {
-              //conversation_state.choice = -1;
-              //resp_message = `Invalid choice.\n`;
-              resp_message = "Send yes to confirm. Send no to return to menu.\n";
-              //updateConversationState(from, "1");
-            }
+            resp_message = confirm_group_choice(req, from, conversation_state);
             break;
           case "3":
-            
-            let type = req.body.entry[0].changes[0].value.messages[0].type;
-            console.log('Type is:' + type);
-            if (type == "image") {
-              console.log("choice is:" + conversation_state.choice)
-              let wa_link = menu[conversation_state.choice + ""].whatsapp_group_link;
-              console.log("wa link: " + wa_link);
-              resp_message = "Thanks for joining 8th standard QAD program. Please use the following link to joining the whatsapp group.\n" + 
-                             `Please do not share the link as this is paid activity.\n\nLink: ${wa_link}` + 
-                              "\n\nThanks,\n- Subodh Pethe";
-              delete conversationData[from];
-            } else {
-              let input = req.body.entry[0].changes[0].value.messages[0].text.body;
-              if (input.toLowerCase() == "back") {
-                conversation_state.choice = -1;
-                resp_message = default_options_message;
-                updateConversationState(from, "1");
-              } else {
-                resp_message = "Please send the confirmation image to proceed.\nSend 'back' in this chat to return to menu.";  
-              }
-            }
+            resp_message = process_screenshot_and_send_link();
             break;
         }
-        
       }
-
-        sendResponse(res, req, resp_message, resp_message);
+      sendResponse(res, req, resp_message);
     }
     res.sendStatus(200);
   } else {
