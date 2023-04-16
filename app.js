@@ -9,9 +9,7 @@
 // and save it as environment variable into the .env file)
 //const token = process.env.WHATSAPP_TOKEN;
 
-//const token = "EAAH3CSuC92gBADgIw5GJWScGmh2SgJxFCQt3ZAGeqyxZCNM8mP4FKSEoavGj2ZAZB67rhmypxz4GwNWWiZCHvtdZCImoENn5tv5sL3AVhz5oonEMjGCdQNfX158ae77ZBi6jWniJppwuq486AIBnsW9Dyu49F3hAZBAmnkKr3cIGafyuwpmEOej9c5wxaCjyrJfwaKt3PP8iXbL6pM7BIrQW7dmDMAb1aKIZD";
-const token = "EAAH3CSuC92gBAA58L88tWqgaDpN16PtLUyTjVCfW53hBTB8B9sRKhV7n2AdZBJCOfEYJ4Ys5HBFKL1ccsZAFdXvOXJTvK609droGOTttVrmdfsZBLwGs9lQyTaBM4ZBBJ2m0WbCyExHD5icOriY8EsPSamtAaZBZBIE5SecQvGVL7xEqhH7G6I1K2r9YIn0qUm7AWKIs7cdlL4t0BChU6Te3LUlFW0UZCgZD";
-
+const token = "EAAH3CSuC92gBAE1ShGH1h0kZAHaVRpXIWykXljBeFogWlIZCFpUNX3xWCO5KQ1ZAZBSj070rk5EZAYdMVUnBbDvv3gl4vxHrdSySpjOrqJFAF9HVmf24KmJf1CdCKEZBzK70stCJ0S6sspZAeXL91e7IHBui49IQYHKjdieKbVmKHIXyyJIIX5u3IdfJZBGPmwfUoD5iMiN5aGsGsx9ltUsNAQcDK3qj1SoZD";
 // Imports dependencies and set up http server
 const request = require("request"),
       express = require("express"),
@@ -55,9 +53,8 @@ function getConversationState(waId) {
 }
 
 // Wrapper to send responses i.e. whatsapp messages to target
-function sendResponse(res, req, resp_message) {
-  let phone_number_id = req.body.entry[0].changes[0].value.metadata.phone_number_id;
-  let from = req.body.entry[0].changes[0].value.messages[0].from;
+function sendResponse(from, resp_message) {
+  let phone_number_id = "105715159164186";
 
   if (!resp_message) {
     return;
@@ -110,30 +107,35 @@ const menu = {
     "whatsapp_group_link": "https://chat.whatsapp.com/LLV2qy4j8CxJsjsLbxuVKy",
     "name": "6th Math",
     "description": "- Basic Maths 2\n- 25 Days\n- INR 25\n",
+    "price": "25",
   },
   "2" : {
     "money": "INR 45",
     "whatsapp_group_link": "https://chat.whatsapp.com/ER6XBYbrpE6HIpFnCIieAG",
     "name": "7th Math",
     "description": "- Topic: Angle Chase/Pythagoras Theorem\n- 45 Days\n- INR 45\n",
+    "price": "45",
   },
   "3" : {
     "money": "INR 29",
     "whatsapp_group_link": "https://chat.whatsapp.com/Gr80bQQYwkE8YdA93EfVsv",
     "name": "8th Math",
     "description": "- Topic: Algebra\n- 29 Days\n- INR 29\n",
+    "price": "29",
   },
   "4" : {
     "money": "INR 30",
     "whatsapp_group_link": "https://chat.whatsapp.com/I2nRjKx49GKDPIoKGvOMdK",
     "name": "9th Math",
     "description": "- Topic: Circle 1\n- 30 Days\n- INR 30\n",
+    "price": "30",
   },
   "5" : {
     "money": "INR 50",
     "whatsapp_group_link": "https://chat.whatsapp.com/ERnI0H9urVyAATBsf1EGDH",
     "name": "Olympiad Geometry",
     "description": "- Olypiad level geometry\n- For Those who completed basic geometry\n- 50 Days\n- INR 50\n",
+    "price": "50",
   },
 }
 
@@ -194,7 +196,7 @@ const responses = {
 
 function init_conversation(req, from) {
   let resp_message = "";
-  let init_input = req.body.entry[0].changes[0].value.messages[0].text.body;
+  let init_input = req.body.entry[0].changes[0].value.messages[0].text ? req.body.entry[0].changes[0].value.messages[0].text.body : "";
 
   if (init_input.toLowerCase() != "qad") {
     resp_message = responses["request_qad_input"];
@@ -253,60 +255,94 @@ const tesseractConfig = {
     psm: 3,
 };
 
-function parseScreenshot(req) {
-
-    let imageId = req.body.entry[0].changes[0].value.messages[0].image.id;
+function parseScreenshot(imageId) {
+  return new Promise((resolve, reject) => {
     let result = "";
     let configImageId = {
-        method: 'get',
-        maxBodyLength: Infinity,
-        url: 'https://graph.facebook.com/v16.0/' + imageId,
-        headers: {
-            'Authorization': 'Bearer ' + token,
-        }
+      method: "get",
+      maxBodyLength: Infinity,
+      url: "https://graph.facebook.com/v16.0/" + imageId,
+      headers: {
+        Authorization: "Bearer " + token,
+      },
     };
 
-    axios.request(configImageId)
-    .then((response) => {
+    axios
+      .request(configImageId)
+      .then((response) => {
         console.log(response.data.url);
         let configImageUrl = {
-            method: 'get',
-            maxBodyLength: Infinity,
-            url: response.data.url,
-            headers: {
-                'Authorization': 'Bearer ' + token,
-            },
-            responseType: "arraybuffer"
+          method: "get",
+          maxBodyLength: Infinity,
+          url: response.data.url,
+          headers: {
+            Authorization: "Bearer " + token,
+          },
+          responseType: "arraybuffer",
         };
 
-        axios.request(configImageUrl)
-        .then((response) => {
-        	    tesseract
-        	      .recognize(response.data, tesseractConfig)
-        	      .then((text) => {
-        		      result = text;
-        		      console.log("Result:", text)
-        	      })
-        })
-        .catch((error) => {
-          console.log(error);
-        });
-    })
-    .catch((error) => {
-    console.log(error);
-    });  
+        axios
+          .request(configImageUrl)
+          .then((response) => {
+            tesseract
+              .recognize(response.data, tesseractConfig)
+              .then((text) => {
+                result = text;
+                console.log("Result:", text);
+                resolve(result);
+              })
+              .catch((error) => {
+                console.log(error);
+                reject(error);
+              });
+          })
+          .catch((error) => {
+            console.log(error);
+            reject(error);
+          });
+      })
+      .catch((error) => {
+        console.log(error);
+        reject(error);
+      });
+  });
 }
 
-function validate_payment_screenshot(req) {
-  let ret = false;
-  let result = "08:51 © viene |\n\n< Transaction Successful\n08:50 AM on 09 Apr 2023\n\n \n\nPaid to\nre) PETHE SMITA SUBODH 250\nMy 9823046706\n\nTransfer Details “A\n\nTransaction ID\n\nT2304090850494065924522 hs)\n\nDebited from\nak KKKKKKKKKKKOD 1 0 =50\nUTR: 309961636829 B\nSend Again View History Share Receipt\n(2) Contact PhonePe Support >\n@ Did you know? ?\nPowered by\n\n \n\f"
-  //let result = "notavnsaoivniuogvneorgnvinvonv";
-  //let result = parseScreenshot(req);
-  if (result.toLowerCase().includes("smita")) {
-    ret = true;
-  }
-  
-  return ret;
+
+function testResultValue(result, conversation_state) {
+    if (result == undefined) {
+        return false;
+    }
+
+    result = result.toLowerCase();
+    let price = menu[conversation_state.choice].price;
+    if (result.includes("smita") &&
+        result.includes("pethe")) {
+        return true;
+    }
+    return false;
+}
+
+function validate_payment_screenshot(from, imageId, conversation_state) {
+
+
+    parseScreenshot(imageId).then((result) => {
+      // Compare the result here
+        console.log("validate_payment_screenshot: " + result);
+        let resp_message = "";
+        let ret = testResultValue(result, conversation_state);
+        if (!ret) {
+          resp_message = responses["invalid_screenshot"] + responses["screenshot_request"] + responses["back_to_menu"];
+        } else {
+          let wa_link = menu[conversation_state.choice].whatsapp_group_link;
+          let group_name = menu[conversation_state.choice].name;
+          resp_message = `Thanks for joining ${group_name} QAD program.\n` + responses["join_message"] + `Link: ${wa_link}` + responses["thanks"];
+          deleteConversation(from);
+        }
+        sendResponse(from, resp_message);
+    }).catch((error) => {
+      console.log(error);
+    });
 }
 
 function process_screenshot_and_send_link(req, from, conversation_state) {
@@ -314,15 +350,9 @@ function process_screenshot_and_send_link(req, from, conversation_state) {
 
   let type = req.body.entry[0].changes[0].value.messages[0].type;
   if (type == "image") {
-    let ret = validate_payment_screenshot(req);
-    if (!ret) {
-      resp_message = responses["invalid_screenshot"] + responses["screenshot_request"] + responses["back_to_menu"];
-    } else {
-      let wa_link = menu[conversation_state.choice].whatsapp_group_link;
-      let group_name = menu[conversation_state.choice].name;
-      resp_message = `Thanks for joining ${group_name} QAD program.\n` + responses["join_message"] + `Link: ${wa_link}` + responses["thanks"];
-      deleteConversation(from); 
-    }
+    let imageId = req.body.entry[0].changes[0].value.messages[0].image.id;
+    validate_payment_screenshot(from, imageId, conversation_state);
+    resp_message = "Confirming payment. Please wait...";
   } else {
     let input = req.body.entry[0].changes[0].value.messages[0].text.body;
     if (input.toLowerCase() == "back") {
@@ -344,16 +374,11 @@ const state = {
 
 // Accepts POST requests at /webhook endpoint
 app.post("/webhook", (req, res) => {
-  // Parse the request body from the POST
-  let body = req.body;
-  console.log(req.body);
-
-  // Check the Incoming webhook message
-  console.log(JSON.stringify(req.body, null, 2));
 
   // info on WhatsApp text message payload: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/payload-examples#text-messages
   if (messageHasBody(req)) {
     if (isTextMessage(req)) {
+      console.log(JSON.stringify(req.body, null, 2));
       let from = req.body.entry[0].changes[0].value.messages[0].from; // extract the phone number from the webhook payload
       let resp_message = "";
       let conversation_state = getConversationState(from);
@@ -378,7 +403,7 @@ app.post("/webhook", (req, res) => {
             break;
         }
       }
-      sendResponse(res, req, resp_message);
+      sendResponse(from, resp_message);
     }
     res.sendStatus(200);
   } else {
@@ -397,7 +422,7 @@ app.get("/webhook", (req, res) => {
    * UPDATE YOUR VERIFY TOKEN
    *This will be the Verify Token value when you set up webhook
   **/
-  const verify_token = process.env.VERIFY_TOKEN;
+  const verify_token = "root123";
 
   // Parse params from the webhook verification request
   let mode = req.query["hub.mode"];
@@ -434,65 +459,6 @@ app.get('/getconversations', (req, res) => {
 
   console.log(ret);
   res.json(ret);
-});
-
-
-app.get('/test', (req, res) => {
-    const tesseract = require("node-tesseract-ocr");
-
-    console.log("test");
-
-    const config = {
-        lang: "eng",
-        oem: 1,
-        psm: 3,
-    };
-
-    let imageId = 182327794630138;
-
-    let configImageId = {
-        method: 'get',
-        maxBodyLength: Infinity,
-        url: 'https://graph.facebook.com/v16.0/' + imageId,
-        headers: {
-            'Authorization': 'Bearer ' + token,
-        }
-    };
-
-    axios.request(configImageId)
-    .then((response) => {
-    //console.log(JSON.stringify(response.data));
-        console.log(response.data.url);
-        let configImageUrl = {
-            method: 'get',
-            maxBodyLength: Infinity,
-            url: response.data.url,
-            headers: {
-                'Authorization': 'Bearer ' + token,
-            },
-            responseType: "arraybuffer"
-        };
-
-        axios.request(configImageUrl)
-        .then((response) => {
-        	    tesseract
-        	      .recognize(response.data, config)
-        	      .then((text) => {
-        		let result = text;
-        		console.log("Result:", text)
-        		res.json({ result });
-        	      })
-            //console.log(JSON.stringify(response.data));
-        })
-        .catch((error) => {
-          console.log(error);
-            res.sendStatus(400);
-        });
-    })
-    .catch((error) => {
-    console.log(error);
-    res.sendStatus(400);
-    });
 });
 
 app.get('/image', (req, res) => {
