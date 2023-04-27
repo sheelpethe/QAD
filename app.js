@@ -9,7 +9,10 @@
 // and save it as environment variable into the .env file)
 //const token = process.env.WHATSAPP_TOKEN;
 
-const token = "EAAH3CSuC92gBAE1ShGH1h0kZAHaVRpXIWykXljBeFogWlIZCFpUNX3xWCO5KQ1ZAZBSj070rk5EZAYdMVUnBbDvv3gl4vxHrdSySpjOrqJFAF9HVmf24KmJf1CdCKEZBzK70stCJ0S6sspZAeXL91e7IHBui49IQYHKjdieKbVmKHIXyyJIIX5u3IdfJZBGPmwfUoD5iMiN5aGsGsx9ltUsNAQcDK3qj1SoZD";
+// Access/ Bearer token is used here.
+//const token = "EAAH3CSuC92gBAJyYmxs6bLzxzkmk4FtSYc85jugxB2dsRqp8Iao0W4unVj91j5rciHTd3iyaRcHHtkd5Egu6N5vGZBPNfWAx6iU2D1Nd4JrQ2ZAymnmFlevYfxbKPOkOKaAZB3TZBR7P0NEcsuYKj7Kux0bzblFhK8ZBEaIwHxuBGW9N1KcwYIVoEfkBpEelbkCVWucBy84AqX7otAO1t91LjUm341jYZD"
+
+
 // Imports dependencies and set up http server
 const request = require("request"),
       express = require("express"),
@@ -19,13 +22,35 @@ const request = require("request"),
       fs = require('fs'),
       Tesseract = require("tesseract.js"),
       tesseract = require("node-tesseract-ocr");
+
+const token_path = "token.txt";
+
+let token = "";
+fs.readFile(token_path, 'utf8', (err, data) => {
+  if (err) throw err;
+  console.log('Token read from file:', data);
+  token = data.trim();
+  console.log(token);
+});
+
+const qad_options_path = "data.json";
+
+let menu1 = {};
+fs.readFile(qad_options_path, 'utf8', (err, data) => {
+  if (err) throw err;
+  console.log('options read from file:', data);
+  menu1 = JSON.parse(data);
+  console.log(menu1);
+});
+
 // Sets server port and logs message on success
-app.listen(process.env.PORT || 1337, () => console.log("webhook is listening"));
+app.listen(process.env.PORT || 1337, () => console.log("App Restarted!\nwebhook is listening"));
 
 // This stores the conversation state for a particular number and the choice.
 // Used to maintain state.
 let conversationData = {};
 
+// Delete user information.
 function deleteConversation(from) {
   delete conversationData[from];
 }
@@ -64,6 +89,8 @@ function sendResponse(from, resp_message) {
     method: "POST", // Required, HTTP method, a string, e.g. POST, GET
     //maxBodyLength: Infinity,
     //maxContentLength: Infinity,
+    //
+    // Send Response Message to user "from" using /messages endpoint and access token.
     url:
       "https://graph.facebook.com/v12.0/" +
       phone_number_id +
@@ -141,6 +168,7 @@ const menu = {
 
 // Helps populate the menu to be displayed to the user. Menu contains group choices.
 function populate_options(menu) {
+  console.log(JSON.stringify(menu));
   let menu_size = Object.keys(menu).length;
   let option_range = " [1-" + menu_size + "] "
   let options_message = "Please select a option from" + option_range + "for the group you want to join:\n\n";
@@ -207,6 +235,7 @@ function init_conversation(req, from) {
   return resp_message;
 }
 
+// This function proccess the input from the user choice and forms a response string to be sent to the user.
 function process_group_choice(req, from) {
   let resp_message = "";
 
@@ -232,6 +261,7 @@ function do_back_to_menu(from) {
   return responses["default_options"];
 }
 
+// Forms string to confirm group choice
 function confirm_group_choice(req, from, conversation_state) {
   let resp_message = "";
 
@@ -255,9 +285,16 @@ const tesseractConfig = {
     psm: 3,
 };
 
+function sendConfirmationToAdmin(from, imageId) {
+
+
+}
+
 function parseScreenshot(imageId) {
   return new Promise((resolve, reject) => {
     let result = "";
+
+    // Get ImageURL using imageID by invoking whatsapp media endpoint using access token/bearer token.
     let configImageId = {
       method: "get",
       maxBodyLength: Infinity,
@@ -271,6 +308,7 @@ function parseScreenshot(imageId) {
       .request(configImageId)
       .then((response) => {
         console.log(response.data.url);
+        // Get image binary data using imageURL by invoking whatsapp medial endpoint using access token.
         let configImageUrl = {
           method: "get",
           maxBodyLength: Infinity,
@@ -330,15 +368,20 @@ function validate_payment_screenshot(from, imageId, conversation_state) {
       // Compare the result here
         console.log("validate_payment_screenshot: " + result);
         let resp_message = "";
-        let ret = testResultValue(result, conversation_state);
+        //let ret = testResultValue(result, conversation_state);
+        let ret = true;
         if (!ret) {
           resp_message = responses["invalid_screenshot"] + responses["screenshot_request"] + responses["back_to_menu"];
         } else {
           let wa_link = menu[conversation_state.choice].whatsapp_group_link;
           let group_name = menu[conversation_state.choice].name;
           resp_message = `Thanks for joining ${group_name} QAD program.\n` + responses["join_message"] + `Link: ${wa_link}` + responses["thanks"];
+
+          // If user image is as expected. Delete user information.
           deleteConversation(from);
         }
+
+        // If the image is as expected send further details about the activity.
         sendResponse(from, resp_message);
     }).catch((error) => {
       console.log(error);
@@ -350,8 +393,10 @@ function process_screenshot_and_send_link(req, from, conversation_state) {
 
   let type = req.body.entry[0].changes[0].value.messages[0].type;
   if (type == "image") {
+    // Get imageID from the message.
     let imageId = req.body.entry[0].changes[0].value.messages[0].image.id;
     validate_payment_screenshot(from, imageId, conversation_state);
+    // Send response of confirming payment while image is proccessed in the background.
     resp_message = "Confirming payment. Please wait...";
   } else {
     let input = req.body.entry[0].changes[0].value.messages[0].text.body;
@@ -372,6 +417,39 @@ const state = {
   "final": "4",
 }
 
+const passkey = "qad2023auto";
+
+app.use(body_parser.urlencoded({ extended: true }));
+app.use(body_parser.json());
+app.post("/token", (req, res) => {
+    let params = req.body;
+    console.log(params["token"]);
+    if (params["password"] != passkey) {
+        console.error("Token Update failed, invalid pass");
+        res.send("Token Update Failed: Invalid pass");
+        return;
+    }
+
+    fs.writeFile(token_path, params["token"], { flag: 'w+' }, (err) => {
+      if (err) {
+        console.error(err);
+        res.send("Token Update Failed");
+        return;
+      }
+
+      console.log(`File '${params}' updated with new content.`);
+    });
+
+    res.send("Token updated");
+
+    //const data = fs.readFileSync('data.json', 'utf-8');
+
+    // Parse the JSON data
+    //const parsedData = JSON.parse(data);
+    //    res.send("Token Updated Successfully");
+    //res.json(parsedData);
+});
+
 // Accepts POST requests at /webhook endpoint
 app.post("/webhook", (req, res) => {
 
@@ -379,7 +457,7 @@ app.post("/webhook", (req, res) => {
   if (messageHasBody(req)) {
     if (isTextMessage(req)) {
       console.log(JSON.stringify(req.body, null, 2));
-      let from = req.body.entry[0].changes[0].value.messages[0].from; // extract the phone number from the webhook payload
+      let from = req.body.entry[0].changes[0].value.messages[0].from; // extract the user phone number from the webhook payload and use this for future responses.
       let resp_message = "";
       let conversation_state = getConversationState(from);
 
@@ -403,6 +481,7 @@ app.post("/webhook", (req, res) => {
             break;
         }
       }
+      // Send Response to the user.
       sendResponse(from, resp_message);
     }
     res.sendStatus(200);
@@ -461,12 +540,120 @@ app.get('/getconversations', (req, res) => {
   res.json(ret);
 });
 
-app.get('/image', (req, res) => {
-  const path = require('path');
-  const imagePath = path.join(__dirname, '/public/wa1.jpg');
-  res.sendFile(imagePath);
+app.get('/', (req, res) => {
+  fs.readFile('pages/home.html', (err, data) => {
+    if (err) {
+      res.writeHead(404, {'Content-Type': 'text/plain'});
+      res.write('File not found');
+      res.end();
+    } else {
+      res.writeHead(200, {'Content-Type': 'text/html'});
+      res.write(data);
+      res.end();
+    }
+  });
 });
 
-app.get('/', (req, res) => {
-  res.send('Coming soon!!!!')
-})
+app.get('/privacypolicy', (req, res) => {
+  fs.readFile('pages/privacypolicy.html', (err, data) => {
+    if (err) {
+      res.writeHead(404, {'Content-Type': 'text/plain'});
+      res.write('File not found');
+      res.end();
+    } else {
+      res.writeHead(200, {'Content-Type': 'text/html'});
+      res.write(data);
+      res.end();
+    }
+  });
+});
+
+app.get('/termsandconditions', (req, res) => {
+  fs.readFile('pages/termsandconditions.html', (err, data) => {
+    if (err) {
+      res.writeHead(404, {'Content-Type': 'text/plain'});
+      res.write('File not found');
+      res.end();
+    } else {
+      res.writeHead(200, {'Content-Type': 'text/html'});
+      res.write(data);
+      res.end();
+    }
+  });
+});
+
+app.get('/updates', (req, res) => {
+  fs.readFile('pages/updates.html', (err, data) => {
+    if (err) {
+      res.writeHead(404, {'Content-Type': 'text/plain'});
+      res.write('File not found');
+      res.end();
+    } else {
+      res.writeHead(200, {'Content-Type': 'text/html'});
+      res.write(data);
+      res.end();
+    }
+  });
+});
+
+const { exec } = require('child_process');
+
+app.post('/restart', (req, res) => {
+    let params = req.body;
+    console.log(params);
+    if (params["password"] != passkey) {
+        console.error("Token Update failed, invalid pass");
+        res.send("Token Update Failed: Invalid pass");
+        return;
+    }
+
+    // Execute the shell script
+    res.send("Restarting app...");
+    exec('./restart.sh', (err, stdout, stderr) => {
+        if (err) {
+        // Handle error
+            console.error(err);
+            return;
+        }
+        // Log the output of the script
+        console.log(`stdout: ${stdout}`);
+        console.log(`stderr: ${stderr}`);
+    });
+
+});
+
+//const url = 'https://fastly.picsum.photos/id/585/200/300.jpg?hmac=9pIkZ1OAqMKxQt7_5yNLOWAjZBmJ99k53TBNs3xQQe4';
+const url = 'https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1572821663213631&ext=1682444763&hash=ATuDUOOdtYEtAp5kNLXx4ibo0cjrJdJGpCKYnkgsvErULg';
+const imagePath = 'image.jpg'; // specify the path and filename for the saved image
+
+app.get('/test', (req, res) => {
+    console.log("Test hit!!!");
+    const axios = require('axios');
+
+    let config = {
+      method: 'get',
+      maxBodyLength: Infinity,
+      url: 'https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1572821663213631&ext=1682444763&hash=ATuDUOOdtYEtAp5kNLXx4ibo0cjrJdJGpCKYnkgsvErULg',
+      headers: {
+        Authorization: 'Bearer ' + token
+      }
+    };
+
+    axios.request(config)
+    .then((response) => {
+        axios.get(url, { responseType: 'stream' }).then((response) => {
+          const writer = fs.createWriteStream(imagePath);
+          response.data.pipe(writer);
+          writer.on('finish', () => {
+            console.log('Image saved successfully!');
+          });
+    }).catch((error) => {
+      console.log('Error while saving image:', error);
+    });
+    })
+    .catch((error) => {
+      console.log(error);
+    });
+
+        res.send(200);
+});
