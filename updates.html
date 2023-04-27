@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>QAD update</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+    <style>
+      body {
+        text-align: center;
+      }
+      form {
+        display: inline-block;
+        text-align: left;
+      }
+      label {
+        display: block;
+        margin: 5px 0px;
+      }
+      input[type="button"] {
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Update QAD Token</h1>
+    <form id="updateForm">
+      <label for="token">Token:</label>
+      <textarea id ="token" name="token" rows="4" cols="100"></textarea>
+      <!--label for="options">QAD options:</label-->
+      <!--textarea id ="options" name="options" rows="20" cols="100"></textarea-->
+      <label for="password">Password:</label>
+      <input type="password" id="password" name="password"><br>
+      <input type="button" value="Submit Token" onclick="updateToken()">
+      <input type="button" value="Restart Server" onclick="restartServer()">
+    </form>
+    <script>
+        const form = document.getElementById("updateForm");
+
+        function updateToken() {
+             const formData = new URLSearchParams();
+            // Get the input field element
+            const tokenInput = document.getElementById('token');
+            const passwordInput = document.getElementById('password');
+
+            // Get the value of the input field
+            const tokenValue = tokenInput.value;
+            const passwordValue = passwordInput.value;
+
+            formData.append('token', tokenValue);
+            formData.append('password', passwordValue);
+
+            fetch('/token', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+              },
+              body: formData.toString()
+            })
+            .then(response => {
+                // Handle response
+                //console.log(response.text());
+                //window.location.reload();
+            })
+            .catch(error => {
+                // Handle error
+                console.log(error);
+            });
+
+        };
+        function restartServer() {
+             const formData = new URLSearchParams();
+            // Get the input field element
+            const passwordInput = document.getElementById('password');
+
+            // Get the value of the input field
+            const passwordValue = passwordInput.value;
+
+            formData.append('password', passwordValue);
+
+            fetch('/restart', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+              },
+              body: formData.toString()
+            })
+            .catch(error => {
+                // Handle error
+                console.log(error);
+            });
+
+        };
+
+    </script>
+  </body>
+</html>
