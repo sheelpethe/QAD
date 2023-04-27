@@ -16,7 +16,10 @@
     "node-tesseract-ocr": "^2.2.1",
     "request": "^2.88.2",
     "tesseract.js": "^4.0.3",
-    "path": "^0.12.7"
+    "path": "^0.12.7",
+    "cookie-parser": "^1.4.6",
+    "express-session": "^1.17.3",
+    "child_process": "^1.0.2"
   },
   "engines": {
     "node": "12.x"
